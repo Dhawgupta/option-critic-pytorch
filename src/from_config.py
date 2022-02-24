@@ -13,6 +13,7 @@ from src.logger import Logger, ReturnWrapper
 from src.oc import OptionCriticConv, OptionCriticFeatures
 from src.loss import actor_loss, critic_loss
 from src.policy import EpsilonGreedy
+from src.fourrooms import Fourrooms
 
 POSSIBLE_LOSS_ACTOR = {
     'option_critic': actor_loss
@@ -30,11 +31,15 @@ POSSIBLE_OPTIMIZER = {
 
 
 def make_env(env_name: str):
-    env = gym.make(env_name)
+    if env_name == 'fourrooms':
+        env = Fourrooms()
 
-    if len(env.observation_space.shape) > 1:
-        env = AtariPreprocessing(env, )
-        env = supersuit.frame_stack_v1(env, 4)
+    else:
+        env = gym.make(env_name)
+
+        if len(env.observation_space.shape) > 1:
+            env = AtariPreprocessing(env, )
+            env = supersuit.frame_stack_v1(env, 4)
 
     env = ReturnWrapper(env)
     return env
@@ -46,6 +51,7 @@ def from_config(filename: str, seed: int = 42):
 
     # Set torch device.
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cpu'
     print(f'On device {device}.')
 
     # Create the environment.

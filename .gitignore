@@ -10,3 +10,7 @@ settings.json
 *.pyc
 runs/*
 analysis/*
+
+*.0
+
+.idea/

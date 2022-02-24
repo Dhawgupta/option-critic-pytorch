@@ -23,5 +23,5 @@
     "polyak": 0.9,
     "actor_loss": "option_critic",
     "critic_loss": "option_critic",
-    "print_every": 2000
+    "print_every": 200
 }
