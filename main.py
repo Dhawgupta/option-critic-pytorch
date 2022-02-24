@@ -6,6 +6,7 @@ from copy import deepcopy
 from option_critic import OptionCriticFeatures, OptionCriticConv
 from option_critic import critic_loss as critic_loss_fn
 from option_critic import actor_loss as actor_loss_fn
+from option_critic import actor_loss2 as actor_loss_fn2
 
 from experience_replay import ReplayBuffer
 from utils import make_env, to_tensor
@@ -14,7 +15,7 @@ from logger import Logger
 import time
 
 parser = argparse.ArgumentParser(description="Option Critic PyTorch")
-parser.add_argument('--env', default='CartPole-v0', help='ROM to run')
+parser.add_argument('--env', default='fourrooms', help='ROM to run')
 parser.add_argument('--optimal-eps', type=float, default=0.05, help='Epsilon when playing optimally')
 parser.add_argument('--frame-skip', default=4, type=int, help='Every how many frames to process')
 parser.add_argument('--learning-rate',type=float, default=.0005, help='Learning rate')
@@ -28,7 +29,7 @@ parser.add_argument('--freeze-interval', type=int, default=200, help=('Interval 
 parser.add_argument('--update-frequency', type=int, default=4, help=('Number of actions before each SGD update.'))
 parser.add_argument('--termination-reg', type=float, default=0.01, help=('Regularization to decrease termination prob.'))
 parser.add_argument('--entropy-reg', type=float, default=0.01, help=('Regularization to increase policy entropy.'))
-parser.add_argument('--num-options', type=int, default=2, help=('Number of options to create.'))
+parser.add_argument('--num-options', type=int, default=4, help=('Number of options to create.'))
 parser.add_argument('--temp', type=float, default=1, help='Action distribution softmax tempurature param.')
 
 parser.add_argument('--max_steps_ep', type=int, default=18000, help='number of maximum steps per episode.')
@@ -74,7 +75,7 @@ def run(args):
         rewards = 0 ; option_lengths = {opt:[] for opt in range(args.num_options)}
 
         obs   = env.reset()
-        state = option_critic.get_state(to_tensor(obs))
+        state = option_critic.get_state(to_tensor(obs)).detach()
         greedy_option  = option_critic.greedy_option(state)
         current_option = 0
 
@@ -103,13 +104,14 @@ def run(args):
                 current_option = np.random.choice(args.num_options) if np.random.rand() < epsilon else greedy_option
                 curr_op_len = 0
     
-            action, logp, entropy = option_critic.get_action(state, current_option)
+            with torch.no_grad():
+                action, logp, entropy = option_critic.get_action(state, current_option)
 
             next_obs, reward, done, _ = env.step(action)
             buffer.push(obs, current_option, reward, next_obs, done)
 
             old_state = state
-            state = option_critic.get_state(to_tensor(next_obs))
+            state = option_critic.get_state(to_tensor(next_obs)).detach()
 
             option_termination, greedy_option = option_critic.predict_option_termination(state, current_option)
             rewards += reward

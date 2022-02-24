@@ -89,6 +89,12 @@ class OptionCriticConv(nn.Module):
 
         return action.item(), logp, entropy
     
+    def get_distribution(self, state, option):
+        logits = state @ self.options_W[option] + self.options_b[option]
+        action_dist = (logits / self.temperature).softmax(dim=-1)
+        action_dist = Categorical(action_dist)
+        return action_dist
+
     def greedy_option(self, state):
         Q = self.get_Q(state)
         return Q.argmax(dim=-1).item()
@@ -223,6 +229,33 @@ def actor_loss(obs, option, logp, entropy, reward, done, next_obs, model, model_
     state = model.get_state(to_tensor(obs))
     next_state = model.get_state(to_tensor(next_obs))
     next_state_prime = model_prime.get_state(to_tensor(next_obs))
+
+    option_term_prob = model.get_terminations(state)[:, option]
+    next_option_term_prob = model.get_terminations(next_state)[:, option].detach()
+
+    Q = model.get_Q(state).detach().squeeze()
+    next_Q_prime = model_prime.get_Q(next_state_prime).detach().squeeze()
+
+    # Target update gt
+    gt = reward + (1 - done) * args.gamma * \
+        ((1 - next_option_term_prob) * next_Q_prime[option] + next_option_term_prob  * next_Q_prime.max(dim=-1)[0])
+
+    # The termination loss
+    termination_loss = option_term_prob * (Q[option].detach() - Q.max(dim=-1)[0].detach() + args.termination_reg) * (1 - done)
+    
+    # actor-critic policy gradient with entropy regularization
+    policy_loss = -logp * (gt.detach() - Q[option]) - args.entropy_reg * entropy
+    actor_loss = termination_loss + policy_loss
+    return actor_loss
+
+def actor_loss2(obs, option, action, reward, done, next_obs, model, model_prime, args):
+    state = model.get_state(to_tensor(obs))
+    next_state = model.get_state(to_tensor(next_obs))
+    next_state_prime = model_prime.get_state(to_tensor(next_obs))
+
+    action_dist = model.get_distribution(state, option)
+    logp = action_dist.log_prob(torch.tensor(action))
+    entropy = action_dist.entropy()
 
     option_term_prob = model.get_terminations(state)[:, option]
     next_option_term_prob = model.get_terminations(next_state)[:, option].detach()
